@@ -33,7 +33,7 @@ class UserProfileView(APIView):
                 "username": request.user.username,
                 "email": request.user.email
             },
-            "education": profile.education,
+            "mobile": profile.mobile,
             "skills_have": profile.skills_have,
             "skills_learn": profile.skills_learn
         })
@@ -51,3 +51,34 @@ class UserProfileView(APIView):
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+class SkillMatchView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            user_profile = UserProfile.objects.get(user=request.user)
+            skills_to_learn = set(map(str.lower, user_profile.skills_learn or []))
+
+            all_profiles = UserProfile.objects.exclude(user=request.user)
+            matched_users = []
+
+            for profile in all_profiles:
+                skills_have_lower = set(map(str.lower, profile.skills_have or []))
+                matched_skills = skills_to_learn.intersection(skills_have_lower)
+
+                if matched_skills:
+                    matched_users.append({
+                        "username": profile.user.username,
+                        "email": profile.user.email,
+                        "matched_skills": list(matched_skills),
+                        # ✅ Fix Profile Image Error (Only include if exists)
+                        "profile_image": request.build_absolute_uri(profile.profile_image.url) if profile.profile_image else None,
+                    })
+
+            return Response({"matched_users": matched_users}, status=status.HTTP_200_OK)
+
+        except UserProfile.DoesNotExist:
+            return Response({"error": "User profile not found"}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
